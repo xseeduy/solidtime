@@ -92,3 +92,23 @@ output "db_secret_arn" {
   description = "Secrets Manager secret ARN for DB credentials"
   value       = aws_secretsmanager_secret.db.arn
 }
+
+output "s3_bucket_name" {
+  description = "S3 bucket name for SolidTime storage"
+  value       = aws_s3_bucket.this.bucket
+}
+
+output "s3_bucket_arn" {
+  description = "S3 bucket ARN"
+  value       = aws_s3_bucket.this.arn
+}
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for Docker images"
+  value       = aws_ecr_repository.this.repository_url
+}
+
+output "ecr_repository_name" {
+  description = "ECR repository name"
+  value       = aws_ecr_repository.this.name
+}

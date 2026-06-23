@@ -18,13 +18,11 @@ terraform {
     region         = "us-east-1"
     dynamodb_table = "terraform-lock"
     encrypt        = true
-    profile        = "xseed"
   }
 }
 
 provider "aws" {
-  region  = var.aws_region
-  profile = "xseed"
+  region = var.aws_region
 
   default_tags {
     tags = {
