@@ -7,13 +7,13 @@ variable "aws_region" {
 variable "environment" {
   description = "Environment name used as resource name suffix"
   type        = string
-  default     = "prod"
+  default     = "production"
 }
 
 variable "project_name" {
   description = "Project name used for resource naming prefix"
   type        = string
-  default     = "xseed-solidtime"
+  default     = "solidtime"
 }
 
 variable "vpc_cidr" {
