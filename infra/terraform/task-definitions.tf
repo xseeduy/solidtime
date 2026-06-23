@@ -4,8 +4,8 @@ locals {
   solidtime_env_vars = [
     { name = "APP_ENV", value = "production" },
     { name = "APP_DEBUG", value = "false" },
-    { name = "APP_URL", value = "https://track.xseed.com.uy" },
-    { name = "APP_FORCE_HTTPS", value = "true" },
+    { name = "APP_URL", value = "http://${aws_lb.this.dns_name}" },
+    { name = "APP_FORCE_HTTPS", value = "false" },
     { name = "OCTANE_SERVER", value = "frankenphp" },
     { name = "TRUSTED_PROXIES", value = "*" },
     { name = "DB_CONNECTION", value = "pgsql" },
