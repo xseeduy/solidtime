@@ -44,3 +44,15 @@ yarn-error.log
 /config/composer
 .opencode
 .skills-lock.json
+PRD.md
+*.tfplan
+tfplan
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+.terraformrc
+terraform.rc
