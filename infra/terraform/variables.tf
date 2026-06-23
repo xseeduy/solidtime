@@ -45,3 +45,9 @@ variable "private_subnet_cidrs" {
     "us-east-1b" = "10.0.11.0/24"
   }
 }
+
+variable "image_tag" {
+  description = "Docker image tag to build and push (empty skips build)"
+  type        = string
+  default     = ""
+}
