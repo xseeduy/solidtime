@@ -112,3 +112,23 @@ output "ecr_repository_name" {
   description = "ECR repository name"
   value       = aws_ecr_repository.this.name
 }
+
+output "alb_dns_name" {
+  description = "ALB DNS name for CNAME record"
+  value       = aws_lb.this.dns_name
+}
+
+output "alb_arn" {
+  description = "ALB ARN for listener rules"
+  value       = aws_lb.this.arn
+}
+
+output "alb_listener_arn" {
+  description = "HTTP listener ARN for ACM certificate binding"
+  value       = aws_lb_listener.http.arn
+}
+
+output "app_secret_arn" {
+  description = "Secrets Manager secret ARN for application keys"
+  value       = aws_secretsmanager_secret.app.arn
+}
