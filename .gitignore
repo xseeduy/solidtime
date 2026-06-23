@@ -43,7 +43,6 @@ yarn-error.log
 /config/caddy
 /config/composer
 .opencode
-.skills-lock.json
 PRD.md
 *.tfplan
 tfplan
