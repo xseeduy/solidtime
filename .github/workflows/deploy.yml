@@ -1,0 +1,186 @@
+name: Xseed Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docker/prod/**"
+      - "infra/terraform/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag (default: git short SHA)"
+        type: string
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve image tag
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "image_tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+  docker_build:
+    name: Build and Push to ECR
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/prod/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'solidtime-production' }}:${{ needs.prepare.outputs.image_tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY || 'solidtime-production' }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  plan_approval:
+    name: Plan Approval
+    needs: [prepare, docker_build]
+    environment: plan-production
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Plan approved for solidtime-production"
+
+  terraform_plan:
+    name: Terraform Plan
+    needs: [prepare, plan_approval]
+    runs-on: ubuntu-latest
+    outputs:
+      plan_summary: ${{ steps.plan.outputs.summary }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/terraform
+        env:
+          TF_VAR_image_tag: ${{ needs.prepare.outputs.image_tag }}
+        run: |
+          terraform plan -out=tfplan -no-color 2>&1 | tee plan_output.txt
+          terraform show -no-color tfplan > plan_show.txt
+          {
+            echo 'summary<<PLAN_EOF'
+            cat plan_show.txt
+            echo PLAN_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/terraform/tfplan
+          retention-days: 1
+
+  apply_approval:
+    name: Apply Approval
+    needs: [prepare, terraform_plan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.token }}
+          approvers: ${{ vars.APPLY_APPROVERS || github.actor }}
+          minimum-approvals: 1
+          issue-title: "Approve deploy — solidtime-production (${{ needs.prepare.outputs.image_tag }})"
+          issue-body: |
+            ### Plan summary
+            ```
+            ${{ needs.terraform_plan.outputs.plan_summary }}
+            ```
+
+            Reply with **approved**, **approve**, **lgtm** or **yes** to deploy.
+            Reply with **denied**, **deny** or **no** to cancel.
+
+  terraform_apply:
+    name: Terraform Apply
+    needs: [prepare, terraform_plan, apply_approval]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra/terraform
+
+      - name: Terraform Apply
+        working-directory: infra/terraform
+        env:
+          TF_VAR_image_tag: ${{ needs.prepare.outputs.image_tag }}
+        run: terraform apply tfplan
